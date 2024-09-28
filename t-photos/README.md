@@ -9,4 +9,4 @@ This folder contains the official team photos for our WRO Future Engineers proje
 **A Fun team pic:** Contains a candit pic of the team members
 
 **Behind the Scenes:** Candid shots of the team during work sessions, illustrating collaboration and problem-solving.
-Feel free to adjust it as needed!
+
