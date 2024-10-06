@@ -1,0 +1,239 @@
+#include <Wire.h>
+#include <MPU6050_tockn.h>
+#include <Servo.h>
+MPU6050 mpu6050(Wire);
+
+#define a 13
+
+// Define color sensor pins
+#define S0 6
+#define S1 5
+#define S2 8
+#define S3 7
+#define sensorOut 9
+const int F = 2;
+const int B = 4;
+int front = 88;
+const int left = 60;
+const int right = 120;
+int b=0;
+
+Servo servo;
+
+// Calibration Values
+int redMin = 26;
+int redMax = 172;
+int greenMin = 29;
+int greenMax = 297;
+int blueMin = 22;
+int blueMax = 168;
+
+int redPW = 0;
+int greenPW = 0;
+int bluePW = 0;
+int redValue;
+int greenValue;
+int blueValue;
+int c = 0;
+float yaw = 0;
+unsigned long previousTime = 0;
+float initialYaw = 0;
+bool turning = false;
+bool turningRight = false;
+
+// Lap and turn counters
+int turnCounter = 0;  // Counts total turns
+const int turnsPerLap = 4;
+const int totalTurns = 12;  // 3 laps × 4 corners = 12 turns
+
+void setup() {
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  pinMode(A0, OUTPUT);
+  pinMode(A1, OUTPUT);
+  servo.attach(10);
+  pinMode(sensorOut, INPUT);
+  pinMode(A2, INPUT);
+  pinMode(A3, INPUT);
+  pinMode(a,INPUT);
+  digitalWrite(S0, HIGH);
+  digitalWrite(S1, LOW);
+
+  Serial.begin(9600);
+
+  mpu6050.begin();
+  mpu6050.calcGyroOffsets(true);  // Keep sensor still while calibrating
+  Serial.println("MPU6050 Initialized");
+  previousTime = millis();
+
+  stopCar();
+  
+  
+}
+
+void loop() {
+ b = digitalRead(a);  // Read the button state
+  if (b == 1 && c == 0) {  // Check if button is pressed and it's the first time
+    delay(1000);           // Optional delay before starting
+    moveForward();         // Start moving forward
+    c = 1;                 // Update c so it only moves forward once after the button press
+  }
+
+   if (c == 0) {
+    stopCar();             // Make sure the car stays stopped
+    return;                // Exit the loop if button hasn't been pressed
+  }
+  
+  if (turnCounter >= totalTurns) {
+    delay(2000);
+    stopCar();
+    Serial.println("Car stopped after completing 3 laps.");
+    return;  // Exit loop once 3 laps are completed
+    c=0;
+  }
+
+  mpu6050.update();
+
+  // Time difference in seconds
+  unsigned long currentTime = millis();
+  float dt = (currentTime - previousTime) / 1000.0;
+  previousTime = currentTime;
+
+  // Calculate yaw (angular velocity around Z-axis)
+  yaw += mpu6050.getGyroZ() * dt;
+
+  // Only check colors if the robot is not turning
+  if (!turning) {
+    // Color detection
+    redPW = getRedPW();
+    redValue = map(redPW, redMin, redMax, 255, 0);
+    delay(10);
+
+    greenPW = getGreenPW();
+    greenValue = map(greenPW, greenMin, greenMax, 255, 0);
+    delay(10);
+
+    bluePW = getBluePW();
+    blueValue = map(bluePW, blueMin, blueMax, 255, 0);
+    delay(10);
+    
+    // Display the RGB values
+    Serial.print("Red = ");
+    Serial.print(redValue);
+    Serial.print(" - Green = ");
+    Serial.print(greenValue);
+    Serial.print(" - Blue = ");
+    Serial.println(blueValue);
+
+    // Check for color-based turns
+    if (detectColor1()) {  // Color 1 detected
+      initialYaw = yaw;  // Record the initial yaw
+      turningRight = true;
+      turning = true;
+      turnRight();
+      delay(1000);
+    } else if (detectColor2()) {  // Color 2 detected
+      initialYaw = yaw;  // Record the initial yaw
+      turningRight = false;
+      turning = true;
+      turnLeft();
+      int front = 88;
+      delay(1000);
+    } else {
+      maintainStraight();  // Maintain center position
+    }
+  }
+
+  // Handle the turning process
+  if (turning) {
+    if (turningRight && abs(yaw - initialYaw) >= 140) {
+      stopCar();
+      turning = false;
+      yaw = 0; // Reset yaw after the turn
+      moveForward();
+      turnCounter++;  // Increment turn counter
+      Serial.print("Turn: ");
+      Serial.println(turnCounter);  // Print current turn count
+    } else if (!turningRight && abs(yaw - initialYaw) >= 160) {
+      stopCar();
+      turning = false;
+      yaw = 0; // Reset yaw after the turn
+      moveForward();
+      turnCounter++;  // Increment turn counter
+      Serial.print("Turn: ");
+      Serial.println(turnCounter);  // Print current turn count
+    }
+  }
+
+  delay(50);  // Adjust for smoother integration
+}
+
+int getRedPW() {
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, LOW);
+  return pulseIn(sensorOut, LOW);
+}
+
+int getGreenPW() {
+  digitalWrite(S2, HIGH);
+  digitalWrite(S3, HIGH);
+  return pulseIn(sensorOut, LOW);
+}
+
+int getBluePW() {
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, HIGH);
+  return pulseIn(sensorOut, LOW);
+}
+
+// Move forward
+void moveForward() {
+  digitalWrite(F, HIGH);
+  digitalWrite(B, LOW);
+  servo.write(front);
+}
+
+// Turn right
+void turnRight() {
+  digitalWrite(F, HIGH);
+  digitalWrite(B, LOW);
+  servo.write(right);
+}
+
+// Turn left
+void turnLeft() {
+  digitalWrite(F, HIGH);
+  digitalWrite(B, LOW);
+  servo.write(left);
+}
+
+// Stop the car
+void stopCar() {
+  digitalWrite(F, LOW);
+  digitalWrite(B, LOW);
+  servo.write(front);
+  Serial.println("Car stopped.");
+}
+
+// Function to detect Color 1 (right turn)
+bool detectColor1() {
+  return (redValue - blueValue >= 15 && redValue < 232 && blueValue < greenValue && greenValue - blueValue >= 20);
+}
+
+// Function to detect Color 2 (left turn)
+bool detectColor2() {
+  return (redValue < 175 && greenValue - redValue >= 30 && greenValue < 215 && greenValue > blueValue && blueValue < 200);
+}
+
+// Function to maintain the straight path
+void maintainStraight() {
+  if (yaw > 6) {
+    //servo.write(left + 5);
+  } else if (yaw < -6) {
+    //servo.write(right - 5);
+  } else {
+    servo.write(front);
+  }
+}
