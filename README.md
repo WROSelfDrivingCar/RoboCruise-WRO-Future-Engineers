@@ -1,4 +1,4 @@
-# AutoNav-WRO-Future-Engineers
+# RoboCruise-WRO-Future-Engineers
 "Developing innovative autonomous solutions for the WRO Future Engineers challenge, combining robotics, AI, and engineering creativity."
 Engineering materials
 
